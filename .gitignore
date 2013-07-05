@@ -1,3 +1,4 @@
+env
 ybinlogp
 ybinlogp_test
 mysql-bin*
@@ -5,3 +6,4 @@ mysql-bin*
 *.so
 *.so.*
 *.pyc
+*.swp

@@ -20,7 +20,7 @@ __version__ = '.'.join(map(str, version_info))
 
 log = logging.getLogger('ybinlogp')
 
-library = ctypes.CDLL("libybinlogp.so.1", use_errno=True)
+library = ctypes.CDLL("./libybinlogp.so.1", use_errno=True)
 
 class EventStruct(ctypes.Structure):
 	"""Internal data structure for Events"""
