@@ -6,15 +6,16 @@ import os
 import time
 from datetime import datetime
 import re
+from collections import defaultdict
 import redis
 from ybinlogp import YBinlogP
-
 from config import REDIS_HOST, REDIS_PORT, EXPIRE
 redis_conn = redis.Redis(REDIS_HOST, REDIS_PORT)
 
 pattern = re.compile(r'\(([0-9]+),([0-9]+),([0-9]+),([0-9]+)\)')
 bp = YBinlogP(sys.argv[1], always_update=True)
 g_current_file = sys.argv[1]
+buffer_dict = defaultdict(list)
 
 def get_next_filename(current_file):
     #mysql-bin.000016
@@ -25,8 +26,17 @@ def get_next_filename(current_file):
 def next_file_exists(filename):
     return os.path.exists(filename)
 
+def flush_cache_to_redis():
+    for k, v in defaultdict.items():
+        if not redis_conn.exists(k):
+            redis_conn.lpush(k, v)
+            redis_conn.expire(k, EXPIRE)
+        else:
+            redis_conn.lpush(k, v)
+
 while True:
     for i,event in enumerate(bp):
+        timer = time.time()
         if event.event_type == "ROTATE_EVENT":
             next_file = event.data.file_name
             g_current_file = next_file
@@ -47,11 +57,14 @@ while True:
                     name = "%s:%s" %(day, itemid)
                     redis_value = "%s:%s" %(clock, value)
                     print name, redis_value
-                    if not redis_conn.exists(name):
-                        redis_conn.rpush(name, redis_value)
-                        redis_conn.expire(name, EXPIRE)
+
+                    timer_now = time.time()
+                    if timer_now - timer >= 60:
+                        flush_cache_to_redis()
+                        buffer_dict = defaultdict(list)
+                        timer = timer_now
                     else:
-                        redis_conn.rpush(name, redis_value)
+                        buffer_dict[name].append(redis_value)
     else:
         print "Got to end at %r" % (bp.tell(),)
         time.sleep(1)
@@ -61,5 +74,6 @@ while True:
             g_current_file = next_file
             bp.clean_up()
             bp = YBinlogP(next_file, always_update=True)
+
 bp.clean_up()
 
