@@ -27,16 +27,16 @@ def next_file_exists(filename):
     return os.path.exists(filename)
 
 def flush_cache_to_redis():
-    for k, v in defaultdict.items():
+    for k, v in buffer_dict.items():
         if not redis_conn.exists(k):
-            redis_conn.lpush(k, v)
+            redis_conn.lpush(k, *v)
             redis_conn.expire(k, EXPIRE)
         else:
-            redis_conn.lpush(k, v)
+            redis_conn.lpush(k, *v)
 
+timer = time.time()
 while True:
     for i,event in enumerate(bp):
-        timer = time.time()
         if event.event_type == "ROTATE_EVENT":
             next_file = event.data.file_name
             g_current_file = next_file
@@ -58,22 +58,29 @@ while True:
                     redis_value = "%s:%s" %(clock, value)
                     print name, redis_value
 
+                    #if not redis_conn.exists(name):
+                    #    redis_conn.lpush(name, redis_value)
+                    #    redis_conn.expire(name, EXPIRE)
+                    #else:
+                    #    redis_conn.lpush(name, redis_value)
+
                     timer_now = time.time()
-                    if timer_now - timer >= 60:
+                    if timer_now - timer >= 30:
                         flush_cache_to_redis()
                         buffer_dict = defaultdict(list)
                         timer = timer_now
                     else:
                         buffer_dict[name].append(redis_value)
-    else:
-        print "Got to end at %r" % (bp.tell(),)
-        time.sleep(1)
-        if next_file_exists(get_next_filename(g_current_file)):
-            print "check next file g_current_file", g_current_file
-            next_file = get_next_filename(g_current_file)
-            g_current_file = next_file
-            bp.clean_up()
-            bp = YBinlogP(next_file, always_update=True)
+
+    flush_cache_to_redis()
+    print "Got to end at %r" % (bp.tell(),)
+    time.sleep(1)
+    if next_file_exists(get_next_filename(g_current_file)):
+        print "check next file g_current_file", g_current_file
+        next_file = get_next_filename(g_current_file)
+        g_current_file = next_file
+        bp.clean_up()
+        bp = YBinlogP(next_file, always_update=True)
 
 bp.clean_up()
 
