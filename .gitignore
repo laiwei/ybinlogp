@@ -1,5 +1,4 @@
 env
-ybinlogp
 ybinlogp_test
 mysql-bin*
 *.o
